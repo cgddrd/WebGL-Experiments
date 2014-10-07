@@ -1,0 +1,60 @@
+<html>
+	<head>
+	<title>2D Basic Colour Shading</title>
+		<!-- Fragment shader is used to establish the colour for each pixel in the polygon. Fragment = Pixel. -->
+		<script id="shader-fs" type="x-shader/x-fragment">
+		
+		 	/* Tell WebGL we want to use medium precision for the fragment shader. */
+		    precision mediump float;
+            
+            /* This is the "varying" vertex colour variable passed in from the vertex shader - NOTICE THEY USE THE SAME NAME! */
+            varying vec4 vColor;
+		
+		    void main(void) {
+		    
+		    	/* gl_FragColor is a built-in GL variable that contains a fragment's colour. */
+	    
+	           /* Set the colour of the pixel. The colour with be smoothly blended thanks to the LINEAR INTERPOLATION calculated by WebGL between passing from the vertex shader to the fragment shader. */
+		        gl_FragColor = vColor;
+		    }
+		</script>
+		
+		<!-- Vertex shader defines the position and shape of each vertex. -->
+		<script id="shader-vs" type="x-shader/x-vertex">
+		
+			/* This variable represents each vertex passed into the shader from the JS logic (via drawScene function) */
+		    attribute vec3 aVertexPosition;
+            
+            /* This variable represents the colour of the current vertex. */
+            attribute vec4 aVertexColor;
+		
+			/* 'uniform' variables can be accessed outside of the vertex code (i.e. via the JS) */
+		    uniform mat4 uMVMatrix;
+		    uniform mat4 uPMatrix;
+            
+            /* This is an "output" (varying) variable that will pass the vertex colours to the fragment shader. */
+            varying vec4 vColor;
+		
+		    void main(void) {
+		    
+		    	/* Multiplies the vertex’s position by the model-view and the projection matrices, and pushes out the result as the final position of the vertex. */
+		          
+                /* Contains the coordinates of the vertex once the shader has finished messing around with it. */
+		        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+		        
+                /* Passes the input colour attribute straight to the output variable to pass onto the fragment shader. - Once this has been executed for each vertex, the interpolation is done to generate the fragments, and these are passed on to the fragment shader. */
+                
+                vColor = aVertexColor;
+		    }
+		</script>
+		
+		<script type="text/javascript" src="js/gl-matrix-2.2.1.min.js"></script>
+		<script type="text/javascript" src="js/webgl-logic.js"></script>
+
+	</head>
+	
+	<body onload="webGLStart();" id="dummybodyid">
+	    <canvas id="glCanvas" style="border: none;" width="500" height="500"></canvas>
+	
+	</body>
+</html>
