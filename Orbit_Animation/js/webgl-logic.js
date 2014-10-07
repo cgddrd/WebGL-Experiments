@@ -17,7 +17,8 @@ var triangleVertexColorBuffer;
 var squareVertexPositionBuffer;
 var squareVertexColorBuffer;
 
-// Variables used to track the rotation of the triangle and square.
+// Variables used to track the rotation of the whole scene, triangle and square.
+var rScene= 0;
 var rTri = 0;
 var rSquare = 0;
 
@@ -33,6 +34,9 @@ function animate() {
     
         if (lastTime != 0) {
             var elapsed = timeNow - lastTime;
+            
+            // The scene is set to rotate at a rate of 180 degrees per second. 
+            rScene += (180 * elapsed) / 1000.0;
             
             // The triangle is set to rotate at a rate of 90 degrees per second. 
             rTri += (90 * elapsed) / 1000.0;
@@ -72,6 +76,9 @@ function initGL(canvas) {
 	// Only continue if WebGL is available and working.
     try {
     
+        //canvas.width = document.width/2;
+        //canvas.height = document.height/2;
+        
         // Try to grab the standard context. If it fails, fallback to experimental.
 		gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
         
@@ -286,17 +293,6 @@ function drawScene() {
     
     // -- DRAW THE TRIANGLE --
     
-  //  vec3.set(translation, 0.0, 0.0, -15);
-//    mat4.translate(mvMatrix, mvMatrix, translation);
-    
-  //  mvPushMatrix();
-    //mat4.rotate(mvMatrix, mvMatrix, degToRad(rTri), [0, 1, 0]);
-    //mat4.scale(mvMatrix, mvMatrix, 0.5);
-    
-  //  setMatrixUniforms();
-    
-//    mvPopMatrix();
-    
     vec3.set(translation, 0.0, 0.0, -7.0);
     
     mat4.translate(mvMatrix, mvMatrix, translation);
@@ -304,9 +300,12 @@ function drawScene() {
     /* "SAVE" the current "state" of the 'model-view' matrix before we perform any rotations via a STACK data structure. This is to ensure the next time we translate, it is not using the "rotated" state which would cause some weird behaviour. */
     mvPushMatrix();
     
-    mat4.rotate(mvMatrix, mvMatrix, degToRad(rTri), [0, 1, 0]);
+    // Rotate the "top-level" model-view (make both shaped orbit each other).
+    mat4.rotate(mvMatrix, mvMatrix, degToRad(rScene), [1, 1, 1]);
     
+    // LOOK HERE! WE ARE PUSHING AGAIN BEFORE POPPING! - BPT
     mvPushMatrix();
+    
     vec3.set(translation, -1.5, 0.0, 0.0);
     
     mat4.translate(mvMatrix, mvMatrix, translation);
