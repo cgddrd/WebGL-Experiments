@@ -286,7 +286,7 @@ function drawScene() {
     
     // -- DRAW THE TRIANGLE --
 
-    vec3.set(translation, -1.5, 0.0, -5.0);
+    vec3.set(translation, -1.5, 0.0, -7.0);
     
     mat4.translate(mvMatrix, mvMatrix, translation);
     

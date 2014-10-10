@@ -35,14 +35,14 @@ function animate() {
         if (lastTime != 0) {
             var elapsed = timeNow - lastTime;
             
-            // The scene is set to rotate at a rate of 180 degrees per second. 
-            rScene += (180 * elapsed) / 1000.0;
+            // The scene is set to rotate at a rate of 90 degrees per second. 
+            rScene += (90 * elapsed) / 1000.0;
             
-            // The triangle is set to rotate at a rate of 90 degrees per second. 
-            rTri += (90 * elapsed) / 1000.0;
+            // The triangle is set to rotate at a rate of 270 degrees per second. 
+            rTri += (270 * elapsed) / 1000.0;
             
-            // The square is set to rotate at a rate of 75 degrees per second. 
-            rSquare += (75 * elapsed) / 1000.0;
+            // The square is set to rotate at a rate of 360 degrees per second. 
+            rSquare += (360 * elapsed) / 1000.0;
         }
     
     lastTime = timeNow;
@@ -268,53 +268,67 @@ function initBuffers() {
     squareVertexColorBuffer.numItems = 4;
 }
 
-/* Actually draws the objects to the WebGL screen. */
+/* 
+ * Fundamentally, when it comes to drawing the scene (and it's objects) we need to draw everything in REVERSE. 
+ *
+ * This means that we draw the shapes FIRST (translating and rotating as required) before "moving up" to the "scene level"
+ * (before translating and rotating the scene as required)
+ *
+ * BETTER DESCRIPTION: WE CAN "GROUP" TRANSFORMATIONS INTO "PARENT/CHILD" GROUPS WHEREBY THE "CHILD" OBJECTS CAN BE AFFECTED BY THE 
+ * TRANSFORMATIONS OF THEIR "PARENT" OBJECTS AS WELL AS THEIR OWN SPECIFIC-TRANSLATIONS. 
+ *
+ * E.G. SHAPES CAN BE SET TO SPIN AROUND IN A ORBIT (SPINNING SET ON "PARENT" SCENE) AND CAN THEN ALSO SPIN ON THEIR OWN AXIS AT THE SAME 
+ * TIME!
+ */
 function drawScene() {
 	
-	// Create a new 3x1 vector to translate the model-view matrix by using the 'mat4.translate' function.
  	var translation = vec3.create();
 
-	// Tell WebGL about the size of our <canvas> element. 
     gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-    
-    // Clear the <canvas> in preparation for drawing on it. 
+     
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-	// Set-up the camera perspective.
-	// Param 1: The matrix that we wish to output to
-	// Param 2: 45 degree field of view 
-	// Param 2: Width-height ratio of canvas
-	// Param 4: Minimum distance from "camera" to render objects (0.1 units)
-	// Param 5: Maximum distance from "camera" to render objects (100 units) 
     mat4.perspective(pMatrix, 45.0, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
 
 	// "Move" WebGL to the centre of the 3D-space.
     mat4.identity(mvMatrix);
     
+    // NEW: Next move the TOP-LEVEL SCENE back along the 'Z' axis by -7 units. 
+    vec3.set(translation, 0.0, 0.0, -7.0);
+    mat4.translate(mvMatrix, mvMatrix, translation);
+    
+    // NEW: Save the state of the TOP-LEVEL SCENE.
+    mvPushMatrix();
+    
+    // NEW: Rotate the TOP-LEVEL model-view along the 'Y' axis (A.K.A. the SCENE - makes both shapes orbit around each other).
+    mat4.rotate(mvMatrix, mvMatrix, degToRad(rScene), [0, 1, 0]);
+    
+    /* 
+     * LOOK HERE! WE ARE PUSHING THE MODEL-VIEW MATRIX AGAIN BEFORE POPPING!
+     * 
+     * NEW: Now we are going to make a copy of the MV matrix as it is at this point it time (with the scene rotation applied).
+     *
+     * We will use this as a "base" for the next set of transformations on the shapes so that they will also rotate with the scene AS WELL
+     * AS any ADDITIONAL rotations/transformations that we apply to the shapes individually. 
+     *
+     * We are doing this because we want the spinning of the TOP-LEVEL SCENE to AFFECT the OBJECTS WITHIN IT (square and triangle).
+     */
+    mvPushMatrix();
+    
     // -- DRAW THE TRIANGLE --
     
-    vec3.set(translation, 0.0, 0.0, -7.0);
-    
-    mat4.translate(mvMatrix, mvMatrix, translation);
-    
-    /* "SAVE" the current "state" of the 'model-view' matrix before we perform any rotations via a STACK data structure. This is to ensure the next time we translate, it is not using the "rotated" state which would cause some weird behaviour. */
-    mvPushMatrix();
-    
-    // Rotate the "top-level" model-view (make both shaped orbit each other).
-    mat4.rotate(mvMatrix, mvMatrix, degToRad(rScene), [1, 1, 1]);
-    
-    // LOOK HERE! WE ARE PUSHING AGAIN BEFORE POPPING! - BPT
-    mvPushMatrix();
-    
+    /* 
+     * NEW: Now we can move -1.5 to the left (to draw the triangle) 
+     *
+     * We don't need to move backwards as we have already done this (above) for the top-level scene. 
+     */ 
     vec3.set(translation, -1.5, 0.0, 0.0);
-    
     mat4.translate(mvMatrix, mvMatrix, translation);
     
-    // Rotate the "CURRENT STATE" of the WebGL context (stored in the 'model-view' matrix) by a set number of degrees along the 'Y' axis.
+    // NEW: Rotate the TRIANGLE along it's 'Y' axis (this does not affect the SCENE, but the spinning scene WILL STILL AFFECT THE TRIANGLE)
     mat4.rotate(mvMatrix, mvMatrix, degToRad(rTri), [0, 1, 0]);
     
     gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
-    
     gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, triangleVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
     
     gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexColorBuffer);
@@ -324,19 +338,34 @@ function drawScene() {
     
     gl.drawArrays(gl.TRIANGLES, 0, triangleVertexPositionBuffer.numItems);
     
-    /* Once we are done rotating, we RESTORE the UN-ROTATED 'model-view' matrix ready for the next time we want to translate. (e.g. We can rotate the triangle around it's vertical axis without affecting the square.) */
+    /* 
+     * NEW: Now we want to 'pop' the current 'model-view' matrix (applying SCENE AND TRIANGLE) transformations as we don't want to
+     * to apply the TRIANGLE transformations of the SQUARE that we are about to draw. 
+     *
+     * 'Popping' this MV matrix will "re-load" the TOP-LEVEL scene MV matrix 'pushed' earlier (above) meaning that the rotation applied 
+     * on the TOP-LEVEL scene will still apply on the SQUARE we are about the draw. 
+     *
+     * If we wanted to keep the square in a static place (i.e. we didn't want it to rotate with the top-level scene) we could also 
+     * 'pop' the TOP-LEVEL SCENE model-view matrix as well. (e.g. "mvPopMatrix(); mvPopMatrix();")
+     */
     mvPopMatrix();
-
+     
     // -- DRAW THE SQUARE --
-    mvPushMatrix();
-    vec3.set(translation, 1.5, 0.0, 0.0);
     
+    /* NEW: Now we want to (again) push another model-view matrix for the SQUARE (same as we did for the triangle).
+     *
+     * This is so that we don't affect anything else with the rotation/translations perform on the square itself. 
+     */
+    mvPushMatrix();
+    
+    /*
+     * NEW: Now we move the square over by 1.5 units to the right (as we are still in the horizontal centre of the 3D-scene) from the
+     * TOP-LEVEL SCENE matrix.
+     */
+    vec3.set(translation, 1.5, 0.0, 0.0);
     mat4.translate(mvMatrix, mvMatrix, translation);
     
-    /* "SAVE" the current "state" of the 'model-view' matrix before we perform any rotations via a STACK data structure. This is to ensure the next time we translate, it is not using the "rotated" state which would cause some weird behaviour. */
-   // mvPushMatrix();
-    
-    // Rotate the "CURRENT STATE" of the WebGL context (stored in the 'model-view' matrix) by a set number of degrees along the 'X' axis.
+    // NEW: Rotate the SQUARE along it's 'X' axis (this does not affect the SCENE or the TRIANGLE, but the spinning scene WILL STILL AFFECT THE SQUARE)
     mat4.rotate(mvMatrix, mvMatrix, degToRad(rSquare), [1, 0, 0]);
     
     gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
@@ -348,8 +377,23 @@ function drawScene() {
     setMatrixUniforms();
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
     
-    /* Once we are done rotating, we RESTORE the UN-ROTATED 'model-view' matrix ready for the next time we want to translate. (e.g. We can rotate the square around it's horizontal axis without affecting the triangle.) */
+    // NEW: We can now 'pop' the square-specific 'model-view' matrix as we do not want to do anything else with the square. 
     mvPopMatrix();
+    
+    
+        /* NEW: DRAW ANYTHING ELSE THAT SHOULD BE AFFECTED BY THE SPINNING TOP-LEVEL SCENE HERE!! */ 
+    
+    /* 
+     * NEW: Finally, we can 'pop' the 'model-view' matrix of the TOP-LEVEL scene as we do not want anything else to be affected by the spinning scene. 
+     *
+     */
+    mvPopMatrix();
+    
+        /* 
+         * NEW: ANYTHING AFTER THIS POINT WOULD NOT ORBIT AROUND AS WE HAVE LEFT THE "CONTEXT" OF THE TOP-LEVEL SCENE. 
+         * 
+         * WE NOW HAVE NOTHING LEFT ON THE 'MODEL-VIEW' MATRIX STACK.
+         */
     
 }
 
