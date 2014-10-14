@@ -1,0 +1,64 @@
+<html>
+	<head>
+	<title>3D Basic Animation</title>
+		<!-- Fragment shader is used to establish the colour for each pixel in the polygon. Fragment = Pixel. -->
+		<script id="shader-fs" type="x-shader/x-fragment">
+		
+		 	/* Tell WebGL we want to use medium precision for the fragment shader. */
+		    precision mediump float;
+            
+            /* This is the "varying" vertex texture variable passed in from the vertex shader - NOTICE THEY USE THE SAME NAME! */
+            varying vec2 vTextureCoord;
+
+            /* Sampler is the shader's way of representing a texture. */
+            uniform sampler2D uSampler;
+		
+		    void main(void) {
+		    
+		    	/* gl_FragColor is a built-in GL variable that contains a fragment's colour/texture. */
+	    
+                /* '.s' and '.t' are the SAME as '.x' and '.y' - Apply the interpolated texture to the pixel. */
+		        gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+		    }
+		</script>
+		
+		<!-- Vertex shader defines the position and shape of each vertex. -->
+		<script id="shader-vs" type="x-shader/x-vertex">
+		
+			/* This variable represents each vertex passed into the shader from the JS logic (via drawScene function) */
+		    attribute vec3 aVertexPosition;
+            
+            /* This variable represents each texture coordinate passed into the shader from the JS logic (via drawScene function) */
+            attribute vec2 aTextureCoord;
+		
+			/* 'uniform' variables can be accessed outside of the vertex code (i.e. via the JS) */
+		    uniform mat4 uMVMatrix;
+		    uniform mat4 uPMatrix;
+            
+            /* This is an "output" (varying) variable that will pass the vertex texture to the fragment shader. */
+            varying vec2 vTextureCoord;
+		
+		    void main(void) {
+		    
+		    	/* Multiplies the vertex’s position by the model-view and the projection matrices, and pushes out the result as the final position of the vertex. */
+		          
+                /* Contains the coordinates of the vertex once the shader has finished messing around with it. */
+		        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+		        
+                /* Passes the input texture attribute straight to the output variable to pass onto the fragment shader. - Once this has been executed for each vertex, the interpolation is done to generate the fragments, and these are passed on to the fragment shader. */
+                
+                vTextureCoord = aTextureCoord;
+		    }
+		</script>
+		<script type="text/javascript" src="js/webgl-utils.js"></script>
+		<script type="text/javascript" src="js/gl-matrix-2.2.1.min.js"></script>
+		<script type="text/javascript" src="js/webgl-logic.js"></script>
+
+	</head>
+	
+	<body onload="webGLStart();" id="dummybodyid">
+	    <canvas id="glCanvas" style="border: none;" width="500" height="500"></canvas>
+	    <p>'W' = Zoom in, 'E' = Zoom out, 'Up' = Move up, 'Down' = Move down, 'Left' = Move left, 'Right' = Move right, 'F' = Change sampling filter (Nearest, Linear, Linear/MIPMAP)</p>
+        <p id="sample-type">Sampling Type: NEAREST</p>
+	</body>
+</html>
