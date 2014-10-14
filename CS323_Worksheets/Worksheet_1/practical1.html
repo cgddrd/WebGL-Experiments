@@ -1,0 +1,268 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <link href="styles/styles.css" media="screen" rel="stylesheet" type="text/css" />
+    <title>Basic WebGL test Page</title>
+<script type="text/javascript" src="js/gl-matrix.js"></script>
+
+<!-- Fragment shader setup -->
+<script id="shader-fs" type="x-shader/x-fragment">
+   /* precision mediump float;
+
+    void main(void) {
+    
+        //Change color of square.
+        //gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+        
+        //gl_FragColor is a built-in GL variable that is used for the fragment's color.
+        //Values can be between 0 - 1. (R,G,B,A)
+        
+        //Updated color as part of practical.
+        gl_FragColor = vec4(0.2, 0.5, 0.65, 1.0);
+    } */
+    
+      //Create colour vector to store different colour at each vertex. 
+      varying lowp vec4 vColor;
+    	
+      void main(void) {
+        gl_FragColor = vColor;
+      }
+</script>
+
+<!-- Vertex shader setup - defines position and shape of each vertex. -->
+<script id="shader-vs" type="x-shader/x-vertex">
+   /* attribute vec3 aVertexPosition;
+
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+
+    void main(void) {
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+    } */
+    
+      attribute vec3 aVertexPosition;
+      attribute vec4 aVertexColor;
+    
+      uniform mat4 uMVMatrix;
+      uniform mat4 uPMatrix;
+      
+      /* Setup variable for vertex's colour. */
+      varying lowp vec4 vColor;
+    
+      void main(void) {
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        
+        /* Set the vertex color. */
+        vColor = aVertexColor;
+      }
+</script>
+
+
+<script type="text/javascript">
+
+    var gl;
+    function initGL(canvas) {
+        try {
+            gl = canvas.getContext("experimental-webgl");
+            gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+    var vertexColorAttribute;
+
+    function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+        
+        //Add vertex color attributes.
+        vertexColorAttribute = gl.getAttribLocation(shaderProgram, "aVertexColor");
+        gl.enableVertexAttribArray(vertexColorAttribute);
+
+        shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+        shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+    }
+
+
+    var mvMatrix = mat4.create();
+    var pMatrix = mat4.create();
+
+    function setMatrixUniforms() {
+        gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
+        gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
+    }
+
+    var squareVertexPositionBuffer;
+    var squareVerticesColorBuffer;
+    var spin=0;
+    
+    /* Creates a buffer to contain all of the vertices for our shapes. */
+    function initBuffers() {
+        
+        //Create a buffer to store vertices values (WebGL)
+        squareVertexPositionBuffer = gl.createBuffer();
+        
+        //Bind the buffer to the current context (gl.ARRAY_BUFFER)
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        
+        //Create a square (4 vertices/corners)
+        vertices = [
+             -0.5,  0.5,  0.0,
+            -0.5,  -0.5,  0.0,
+             0.5, 0.5,  0.0, 
+            
+            //Add a final point in the bottom-right corner to create a square.
+            0.5, -0.5, 0.0
+             
+        ];
+        
+        /* 
+        Create a JavaScript array containing the coordinates for each vertex of the square. This is then converted into an array of WebGL floats and passed into the gl object's bufferData() method to establish the vertices for the object.
+        */
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        
+        //Define the size of the items (3 axis - X,Y,Z)
+        squareVertexPositionBuffer.itemSize = 3;
+        
+        //Increment the number of vertices from 3 to 4 in order to draw a square.
+        squareVertexPositionBuffer.numItems = 4;
+        
+        //Define a new array of colours for each of the four vertices of the square. 
+        var colors = [
+            1.0,  1.0,  1.0,  1.0,    // white
+            1.0,  0.0,  0.0,  1.0,    // red
+            0.0,  1.0,  0.0,  1.0,    // green
+            0.0,  0.0,  1.0,  1.0     // blue
+          ];
+
+          //Create and bind the buffers for the colours array. 
+          squareVerticesColorBuffer = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, squareVerticesColorBuffer);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+      }
+
+
+    function drawScene() {
+       
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        mat4.ortho(pMatrix, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
+        mat4.identity(mvMatrix);
+        
+        //Rotate the square based on the user's current mouse position on the Z axis.
+        mat4.rotate(mvMatrix, mvMatrix, spin, [0, 0, 1]);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+        
+        /* Bind the vertices colour buffer to WebGL object. */
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVerticesColorBuffer);
+        gl.vertexAttribPointer(vertexColorAttribute, 4, gl.FLOAT, false, 0, 0);
+        
+        setMatrixUniforms();
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+        
+    }
+
+     function handleMouseMove(event) {
+         
+        //Calculate the current angle (radians) based on user's current mouse position (500 = window size)
+        spin = (event.clientX-250)/500.0;
+        drawScene();
+   }
+
+    function webGLStart() {
+        var canvas = document.getElementById("practical1-canvas");
+        canvas.onmousemove=handleMouseMove;
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+
+        drawScene();
+    }
+
+</script>
+
+
+</head>
+
+
+<body onload="webGLStart();">
+<table><tr><td>
+    <canvas id="practical1-canvas"  width="500" height="500"></canvas>
+    </td><td>
+    <h1>Practical 1 - Introductions to WebGL</h1>
+    <p>In this practical you are provided with a simple outline program that initialises a WegGL canvas, sets up some simple shaders and draws a triangle.</p>
+    <h2>Suggested changes</h2>
+    <ol><li><b>Complete the square: </b>Add a point to the list of vertices and update the "numItems" of the buffer to draw a square.  Can you work out what point to add?  Why does adding one point draw a whole triangle?</li>
+    <li><b>Change the colour: </b>Change the colour of the square in the fragment shader.</li>
+    <li><b>Spin the square: </b>In the webGLStart method we have already added a handler for onmousemove events to the canvas.  The method "handleMouseMove" is triggered on a mouse move and updates the spin variable and redraws the scene. The spin variable needs to be used to spin the square.  Set the "mvMatrix" to be a rotation about z by angle "spin".</li>
+    <li>Links: <a href="http://glmatrix.net/">http://glmatrix.net/</a> glMatrix documentation, <a href="https://code.google.com/p/glmatrix/wiki/Usage">https://code.google.com/p/glmatrix/wiki/Usage</a> basic glmmatrix usage wiki.</li>
+    </ol>
+    </td>
+    </tr>
+    </table>
+</body>
+
+</html>

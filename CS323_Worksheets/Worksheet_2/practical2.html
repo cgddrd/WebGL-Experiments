@@ -1,0 +1,678 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <link href="styles/styles.css" media="screen" rel="stylesheet" type="text/css" />
+    <title>Practical 2: WebGL transforms</title>
+    <script type="text/javascript" src="js/gl-matrix.js"></script>
+    
+    <script id="shader-fs" type="x-shader/x-fragment">
+      precision mediump float;
+       varying vec4 vCol;
+     
+      void main(void) {
+        gl_FragColor = vCol;
+      }
+    </script>
+    
+    <script id="shader-vs" type="x-shader/x-vertex">
+      attribute vec3 aVertexPosition;
+      attribute vec4 aVertexColour;
+      varying vec4 vCol;
+      uniform mat4 uMVMatrix;
+      uniform mat4 uPMatrix;
+      uniform mat4 uBaseMatrix;
+      
+      /* CG - Added new UNIFORM vectors that we can access from the JS. */
+      uniform vec3 aScalingVector;
+      uniform float aScalingFactor;
+      
+      uniform vec3 aSheerDirectionVector;
+      uniform vec3 aSheerNormalVector;
+      
+      mat3 outerProduct(vec3 dir, vec3 norm) {
+          mat3 res;
+          for (int i=0; i<3; i++) {
+              for (int j=0; j<3; j++) {
+                  res[i][j]=dir[i]*norm[j];
+              }
+          }
+          return res;
+      }
+      
+      void main(void) {
+        mat3 id = mat3(1.0);
+        vCol = aVertexColour;
+        
+        /* 
+        
+        /* CG - Scale the current vertex position by a given factor and vector (using Equation 220 in slides) */
+        
+        vec3 aNewScalingVec = normalize(aScalingVector);
+        
+        vec3 aNewPosition = aVertexPosition + ((aScalingFactor - 1.0) * dot(aNewScalingVec, aVertexPosition)) * aNewScalingVec;
+        
+        gl_Position = uPMatrix * uBaseMatrix * uMVMatrix *vec4(aNewPosition, 1.0); 
+        
+        */
+        
+        /* CG - Sheer the current vertex position using a sheer direction vector and sheer normal vector (requires an identity matrix) (using Equation 247 in slides) - Equation required OUTER PRODUCT of SHEER DIRECTION VECTOR AND SHEER NORMAL VECTOR (provided above) */
+        
+        /* CG - Create the new identity matrix. */
+        mat3 identityMatrix = mat3(1.0);
+        
+        /* Directional sheer */
+        
+        vec3 aNewSheerDirection = (identityMatrix + outerProduct(aSheerDirectionVector, aSheerNormalVector)) * aVertexPosition;
+       
+        gl_Position = uPMatrix * uBaseMatrix * uMVMatrix *vec4(aNewSheerDirection, 1.0); 
+    
+      }
+    </script>
+    
+    
+    <script type="text/javascript">
+      
+      var gl;
+        
+        // CG - Provide scaling factor and vector.
+        var scalingFactor = 2;
+        
+        // CG - X, Y, Z
+        var scalingVector = [1, 1, 0];
+        
+        // CG - Provide sheer direction and normal vectors. 
+        var sheerDirection = [0, 1, 0];
+        var sheerNormal = [1, 1, 0];
+        
+      function initGL(canvas) {
+        try {
+          gl = canvas.getContext("experimental-webgl");
+          gl.viewportWidth = canvas.width;
+          gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+          alert("Could not initialise WebGL, sorry :-(");
+        }
+      }
+      
+      
+      function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+          return null;
+        }
+        
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+          if (k.nodeType == 3) {
+            str += k.textContent;
+          }
+          k = k.nextSibling;
+        }
+        
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+          shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+          shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+          return null;
+        }
+        
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+        
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          alert(gl.getShaderInfoLog(shader));
+          return null;
+        }
+        
+        return shader;
+      }
+      
+      
+      var shaderProgram;
+      
+      function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+        
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+        
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+          alert("Could not initialise shaders");
+        }
+        
+        gl.useProgram(shaderProgram);
+        
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+          
+        shaderProgram.vertexColourAttribute = gl.getAttribLocation(shaderProgram, "aVertexColour");
+        gl.enableVertexAttribArray(shaderProgram.vertexColourAttribute);
+        
+        shaderProgram.baseMatrixUniform = gl.getUniformLocation(shaderProgram, "uBaseMatrix");
+        shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+        shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+          
+        
+        // CG - Create references to 'aScalingFactor' and 'aScalingVector' variables within vertex shader.
+        shaderProgram.vertexScalingFactorAttribute = gl.getUniformLocation(shaderProgram, "aScalingFactor");
+        shaderProgram.vertexScalingVectorAttribute = gl.getUniformLocation(shaderProgram, "aScalingVector");
+        
+        // CG - Create references to 'aSheerDirectionVector' and 'aSheerNormalVector' variables within vertex shader.
+        shaderProgram.vertexSheerDirectionVectorAttribute = gl.getUniformLocation(shaderProgram, "aSheerDirectionVector");
+        shaderProgram.vertexSheerNormalVectorAttribute = gl.getUniformLocation(shaderProgram, "aSheerNormalVector");
+      }
+      
+       function handleLoadedTexture(texture) {
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+        gl.generateMipmap(gl.TEXTURE_2D);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+    
+      var mvMatrix = mat4.create();
+      var updateMatrix = mat4.create();
+      var baseMatrix = mat4.create();
+      var pMatrix = mat4.create();
+      
+      function setMatrixUniforms() {
+        gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
+        gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
+        gl.uniformMatrix4fv(shaderProgram.baseMatrixUniform, false, baseMatrix);
+        
+        // CG - Pass-in the 3-element array ('scalingVector') into the vertext shader.
+        // CG - 'uniform3fv' means we want to pass a VECTOR containing FLOATS with THREE values into a UNIFORM variable.
+        gl.uniform3fv(shaderProgram.vertexScalingVectorAttribute, scalingVector);
+          
+        // CG - 'uniform1f' means we want to pass a SINGLE FLOAT into a UNIFORM variable.
+        gl.uniform1f(shaderProgram.vertexScalingFactorAttribute, scalingFactor);
+                              
+        gl.uniform3fv(shaderProgram.vertexSheerDirectionVectorAttribute, sheerDirection);
+        gl.uniform3fv(shaderProgram.vertexSheerNormalVectorAttribute, sheerNormal);                      
+      }
+      
+      
+      var pyramidVertexPositionBuffer;
+      var pyramidVertexColourBuffer;
+      
+      function initBuffers() {
+        pyramidVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, pyramidVertexPositionBuffer);
+       
+        
+         var vertices = [
+         //base
+          -0.5,  0.5,  -0.5,
+          -0.5,  -0.5,  -0.5,
+          0.5, 0.5,  -0.5,
+          -0.5,  -0.5,  -0.5,
+          0.5, 0.5,  -0.5,
+          0.5, -0.5,  -0.5,
+          //+ve x
+           0.5, 0.5,  -0.5,
+          0.5, -0.5,  -0.5,
+          0.0, 0.0, 0.5,
+          // -ve y
+           0.5, -0.5,  -0.5,
+          0.0, 0.0, 0.5,
+          -0.5, -0.5, -0.5,
+          // -ve x
+           0.0, 0.0, 0.5,
+          -0.5, -0.5, -0.5,
+          -0.5, 0.5, -0.5,
+          // +ve y
+          0.5, 0.5, -0.5,
+          -0.5, 0.5, -0.5,
+          0.0, 0.0, 0.5
+        ];
+        
+        var normals = [
+           0, 0, -1,
+           0, 0, -1,
+           0, 0, -1,
+           0, 0, -1,
+           0, 0, -1,
+           0, 0, -1,
+           1, 0, 0.5,
+           1, 0, 0.5,
+           1, 0, 0.5,
+           0, -1,0.5,
+           0, -1,0.5,
+           0, -1,0.5,
+           -1, 0, 0.5,
+           -1, 0, 0.5,
+           -1, 0, 0.5,
+
+
+           0, 1,0.5,
+           0, 1,0.5,
+           0, 1,0.5
+        ];
+        var colours = [
+           1, 0, 1, 1,
+           1, 0, 1, 1,
+           1, 0, 1, 1,
+           1, 0, 0, 1,
+           1, 0, 0, 1,
+           1, 0, 0, 1,
+           0, 1, 0, 1,
+           0, 1, 0, 1,
+           0, 1, 0, 1,
+           0, 0, 1, 1,
+           0, 0, 1, 1,
+           0, 0, 1, 1,
+           1, 1, 0, 1,
+           1, 1, 0, 1,
+           1, 1, 0, 1,
+           0, 1, 1, 1,
+           0, 1, 1, 1, 
+           0, 1, 1, 1
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        pyramidVertexPositionBuffer.itemSize = 3;
+        pyramidVertexPositionBuffer.numItems = 18;
+        
+        pyramidVertexColourBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, pyramidVertexColourBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colours), gl.STATIC_DRAW);
+        pyramidVertexColourBuffer.itemSize = 4;
+        pyramidVertexColourBuffer.numItems = 18;
+        
+      }
+      
+      
+      function drawScene() {
+        // alert("Drawing scene");
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        
+         mat4.perspective(pMatrix, 45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
+       // mat4.ortho(pMatrix, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
+        mat4.identity(baseMatrix);
+          mat4.translate(baseMatrix, baseMatrix, [0.0, 0.0, -7.0]);
+          mat4.identity(mvMatrix);
+          mvMatrix[0] = parseFloat(document.getElementById("x00").value); 
+          mvMatrix[1] = parseFloat(document.getElementById("x01").value);
+          mvMatrix[2]= parseFloat(document.getElementById("x02").value);
+          mvMatrix[3]= parseFloat(document.getElementById("x03").value);
+          mvMatrix[4] = parseFloat(document.getElementById("x10").value); 
+          mvMatrix[5] = parseFloat(document.getElementById("x11").value);
+          mvMatrix[6]= parseFloat(document.getElementById("x12").value);
+          mvMatrix[7]= parseFloat(document.getElementById("x13").value);
+          mvMatrix[8] = parseFloat(document.getElementById("x20").value); 
+          mvMatrix[9] = parseFloat(document.getElementById("x21").value);
+          mvMatrix[10]= parseFloat(document.getElementById("x22").value);
+          mvMatrix[11]= parseFloat(document.getElementById("x23").value);
+          mvMatrix[12] = parseFloat(document.getElementById("x30").value); 
+          mvMatrix[13] = parseFloat(document.getElementById("x31").value);
+          mvMatrix[14]= parseFloat(document.getElementById("x32").value);
+          mvMatrix[15]= parseFloat(document.getElementById("x33").value);
+          setMatrixUniforms();
+       
+        gl.bindBuffer(gl.ARRAY_BUFFER, pyramidVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, pyramidVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(pyramidVertexColourBuffer);
+        gl.bindBuffer(gl.ARRAY_BUFFER, pyramidVertexColourBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexColourAttribute, pyramidVertexColourBuffer.itemSize, gl.FLOAT, false, 0, 0);        
+        
+        gl.drawArrays(gl.TRIANGLES, 0, pyramidVertexPositionBuffer.numItems);
+        
+      }
+      
+      function multiply() {
+     
+         mvMatrix[0] = parseFloat(document.getElementById("x00").value); 
+          mvMatrix[1] = parseFloat(document.getElementById("x01").value);
+          mvMatrix[2]= parseFloat(document.getElementById("x02").value);
+          mvMatrix[3]= parseFloat(document.getElementById("x03").value);
+          mvMatrix[4] = parseFloat(document.getElementById("x10").value); 
+          mvMatrix[5] = parseFloat(document.getElementById("x11").value);
+          mvMatrix[6]= parseFloat(document.getElementById("x12").value);
+          mvMatrix[7]= parseFloat(document.getElementById("x13").value);
+          mvMatrix[8] = parseFloat(document.getElementById("x20").value); 
+          mvMatrix[9] = parseFloat(document.getElementById("x21").value);
+          mvMatrix[10]= parseFloat(document.getElementById("x22").value);
+          mvMatrix[11]= parseFloat(document.getElementById("x23").value);
+          mvMatrix[12] = parseFloat(document.getElementById("x30").value); 
+          mvMatrix[13] = parseFloat(document.getElementById("x31").value);
+          mvMatrix[14]= parseFloat(document.getElementById("x32").value);
+          mvMatrix[15]= parseFloat(document.getElementById("x33").value);
+          
+          
+           
+           updateMatrix[0] = parseFloat(document.getElementById("y00").value); 
+          updateMatrix[1] = parseFloat(document.getElementById("y01").value);
+          updateMatrix[2]= parseFloat(document.getElementById("y02").value);
+          updateMatrix[3]= parseFloat(document.getElementById("y03").value);
+          updateMatrix[4] = parseFloat(document.getElementById("y10").value); 
+          updateMatrix[5] = parseFloat(document.getElementById("y11").value);
+          updateMatrix[6]= parseFloat(document.getElementById("y12").value);
+          updateMatrix[7]= parseFloat(document.getElementById("y13").value);
+          updateMatrix[8] = parseFloat(document.getElementById("y20").value); 
+          updateMatrix[9] = parseFloat(document.getElementById("y21").value);
+          updateMatrix[10]= parseFloat(document.getElementById("y22").value);
+          updateMatrix[11]= parseFloat(document.getElementById("y23").value);
+          updateMatrix[12] = parseFloat(document.getElementById("y30").value); 
+          updateMatrix[13] = parseFloat(document.getElementById("y31").value);
+          updateMatrix[14]= parseFloat(document.getElementById("y32").value);
+          updateMatrix[15]= parseFloat(document.getElementById("y33").value);
+          
+         
+          mat4.mul(mvMatrix, updateMatrix, mvMatrix);
+         
+           document.getElementById("x00").value = mvMatrix[0];
+           document.getElementById("x01").value = mvMatrix[1];
+           document.getElementById("x02").value = mvMatrix[2];
+           document.getElementById("x03").value = mvMatrix[3];
+           document.getElementById("x10").value = mvMatrix[4];
+           document.getElementById("x11").value = mvMatrix[5];
+           document.getElementById("x12").value = mvMatrix[6];
+           document.getElementById("x13").value = mvMatrix[7];
+           document.getElementById("x20").value = mvMatrix[8];
+           document.getElementById("x21").value = mvMatrix[9];
+           document.getElementById("x22").value = mvMatrix[10];
+           document.getElementById("x23").value = mvMatrix[11];
+           document.getElementById("x30").value = mvMatrix[12];
+           document.getElementById("x31").value = mvMatrix[13];
+           document.getElementById("x32").value = mvMatrix[14];
+           document.getElementById("x33").value = mvMatrix[15];
+           
+           drawScene();
+          
+      }
+      
+      function degToRad(x) {
+          return x*3.141592653589793/180.0;
+      }
+      
+      function rotateX() {
+         var angle = parseFloat(document.getElementById("angle").value)
+         angle=degToRad(angle);
+        document.getElementById("y00").value = 1;
+           document.getElementById("y01").value = 0;
+           document.getElementById("y02").value = 0;
+           document.getElementById("y03").value = 0;
+           document.getElementById("y10").value =0;
+           document.getElementById("y11").value = Math.cos(angle);
+           document.getElementById("y12").value = Math.sin(angle);
+           document.getElementById("y13").value = 0;
+           document.getElementById("y20").value = 0;
+           document.getElementById("y21").value = -Math.sin(angle);
+           document.getElementById("y22").value = Math.cos(angle);
+           document.getElementById("y23").value = 0;
+           document.getElementById("y30").value = 0;
+           document.getElementById("y31").value = 0;
+           document.getElementById("y32").value = 0;
+           document.getElementById("y33").value = 1;
+      }
+      
+      function rotateY() {
+         var angle = parseFloat(document.getElementById("angle").value)
+           angle=degToRad(angle);
+           document.getElementById("y00").value = Math.cos(angle);
+           document.getElementById("y01").value = 0;
+           document.getElementById("y02").value = Math.sin(angle);
+           document.getElementById("y03").value = 0;
+           document.getElementById("y10").value = 0;
+           document.getElementById("y11").value = 1;
+           document.getElementById("y12").value = 0;
+           document.getElementById("y13").value = 0;
+           document.getElementById("y20").value = -Math.sin(angle);
+           document.getElementById("y21").value = 0;
+           document.getElementById("y22").value = Math.cos(angle);
+           document.getElementById("y23").value = 0;
+           document.getElementById("y30").value = 0;
+           document.getElementById("y31").value = 0;
+           document.getElementById("y32").value = 0;
+           document.getElementById("y33").value = 1;
+      }
+      
+      function rotateZ() {
+         var angle = parseFloat(document.getElementById("angle").value)
+        angle=degToRad(angle);
+        document.getElementById("y00").value = Math.cos(angle);
+           document.getElementById("y01").value = Math.sin(angle);
+           document.getElementById("y02").value = 0;
+           document.getElementById("y03").value = 0;
+           document.getElementById("y10").value = -Math.sin(angle);
+           document.getElementById("y11").value = Math.cos(angle);
+           document.getElementById("y12").value = 0;
+           document.getElementById("y13").value = 0;
+           document.getElementById("y20").value = 0;
+           document.getElementById("y21").value = 0;
+           document.getElementById("y22").value = 1;
+           document.getElementById("y23").value = 0;
+           document.getElementById("y30").value = 0;
+           document.getElementById("y31").value = 0;
+           document.getElementById("y32").value = 0;
+           document.getElementById("y33").value = 1;
+      }
+      
+      function yIdentity() {
+           document.getElementById("y00").value = 1;
+           document.getElementById("y01").value = 0;
+           document.getElementById("y02").value = 0;
+           document.getElementById("y03").value = 0;
+           document.getElementById("y10").value = 0;
+           document.getElementById("y11").value = 1;
+           document.getElementById("y12").value = 0;
+           document.getElementById("y13").value = 0;
+           document.getElementById("y20").value = 0;
+           document.getElementById("y21").value = 0;
+           document.getElementById("y22").value = 1;
+           document.getElementById("y23").value = 0;
+           document.getElementById("y30").value = 0;
+           document.getElementById("y31").value = 0;
+           document.getElementById("y32").value = 0;
+           document.getElementById("y33").value = 1;
+      }
+      
+      function xIdentity() {
+           document.getElementById("x00").value = 1;
+           document.getElementById("x01").value = 0;
+           document.getElementById("x02").value = 0;
+           document.getElementById("x03").value = 0;
+           document.getElementById("x10").value = 0;
+           document.getElementById("x11").value = 1;
+           document.getElementById("x12").value = 0;
+           document.getElementById("x13").value = 0;
+           document.getElementById("x20").value = 0;
+           document.getElementById("x21").value = 0;
+           document.getElementById("x22").value = 1;
+           document.getElementById("x23").value = 0;
+           document.getElementById("x30").value = 0;
+           document.getElementById("x31").value = 0;
+           document.getElementById("x32").value = 0;
+           document.getElementById("x33").value = 1;
+           drawScene();
+      }
+      
+      
+      function yCopyX() {
+           document.getElementById("y00").value = document.getElementById("x00").value;
+           document.getElementById("y01").value = document.getElementById("x01").value;
+           document.getElementById("y02").value = document.getElementById("x02").value;
+           document.getElementById("y03").value = document.getElementById("x03").value;
+           document.getElementById("y10").value = document.getElementById("x10").value;
+           document.getElementById("y11").value = document.getElementById("x11").value;
+           document.getElementById("y12").value = document.getElementById("x12").value;
+           document.getElementById("y13").value = document.getElementById("x13").value;
+           document.getElementById("y20").value = document.getElementById("x20").value;
+           document.getElementById("y21").value = document.getElementById("x21").value;
+           document.getElementById("y22").value = document.getElementById("x22").value;
+           document.getElementById("y23").value = document.getElementById("x23").value;
+           document.getElementById("y30").value = document.getElementById("x30").value;
+           document.getElementById("y31").value = document.getElementById("x31").value;
+           document.getElementById("y32").value = document.getElementById("x32").value;
+           document.getElementById("y33").value = document.getElementById("x33").value;
+      }
+      
+      function handleMouseMove(event) {
+        drawScene();
+      }
+      
+      function webGLStart() {
+        var canvas = document.getElementById("practical2-canvas");
+        canvas.onmousemove = handleMouseMove;
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+        
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+        
+        drawScene();
+      }
+      
+      
+    </script>
+    
+    
+  </head>
+  
+  
+  <body onload="webGLStart();">
+    <table>
+    <tr>
+    <td>
+    <canvas id="practical2-canvas" style="border: none;" width="500" height="500"></canvas>
+    </td>
+    <td>
+    <table style="border: 0; padding: 10px;">
+      <tbody>
+        <tr>
+          <td>
+            <b>Matrix:</b></td></tr>
+            <tr>
+          <td> <input id="x00" type="text" value="1.0" /></td>
+          <td> <input id="x10" type="text" value="0.0" /></td>
+          <td> <input id="x20" type="text" value="0.0" /></td>
+          <td> <input id="x30" type="text" value="0.0" /></td>
+          </tr>
+          <tr>
+          <td> <input id="x01" type="text" value="0.0" /></td>
+          <td> <input id="x11" type="text" value="1.0" /></td>
+          <td> <input id="x21" type="text" value="0.0" /></td>
+          <td> <input id="x31" type="text" value="0.0" /></td>
+          </tr>
+          <tr>
+          <td> <input id="x02" type="text" value="0.0" /></td>
+          <td> <input id="x12" type="text" value="0.0" /></td>
+          <td> <input id="x22" type="text" value="1.0" /></td>
+          <td> <input id="x32" type="text" value="0.0" /></td>
+          </tr>
+          <tr>
+          <td> <input id="x03" type="text" value="0.0" /></td>
+          <td> <input id="x13" type="text" value="0.0" /></td>
+          <td> <input id="x23" type="text" value="0.0" /></td>
+          <td> <input id="x33" type="text" value="1.0" /></td>
+          </tr>
+      </tbody>
+    </table>
+    <button type="button" onclick="xIdentity()">Identity</button>
+  
+    <table>
+     <tbody>
+        <tr>
+          <td>
+            <b>Update matrix:</b></td></tr>
+            <tr>
+          <td> <input id="y00" type="text" value="1.0" /></td>
+          <td> <input id="y10" type="text" value="0.0" /></td>
+          <td> <input id="y20" type="text" value="0.0" /></td>
+          <td> <input id="y30" type="text" value="0.0" /></td>
+          </tr>
+          <tr>
+          <td> <input id="y01" type="text" value="0.0" /></td>
+          <td> <input id="y11" type="text" value="1.0" /></td>
+          <td> <input id="y21" type="text" value="0.0" /></td>
+          <td> <input id="y31" type="text" value="0.0" /></td>
+          </tr>
+          <tr>
+          <td> <input id="y02" type="text" value="0.0" /></td>
+          <td> <input id="y12" type="text" value="0.0" /></td>
+          <td> <input id="y22" type="text" value="1.0" /></td>
+          <td> <input id="y32" type="text" value="0.0" /></td>
+          </tr>
+          <tr>
+          <td> <input id="y03" type="text" value="0.0" /></td>
+          <td> <input id="y13" type="text" value="0.0" /></td>
+          <td> <input id="y23" type="text" value="0.0" /></td>
+          <td> <input id="y33" type="text" value="1.0" /></td>
+          </tr>
+      </tbody>
+    </table>
+    
+  <button type="button" onclick="multiply()">Multiply</button>
+  <button type="button" onclick="yIdentity()">Identity</button>
+  <button type="button" onclick="yCopyX()">Copy</button>
+  <button type="button" onclick="rotateX()">RotateX</button>
+  <button type="button" onclick="rotateY()">RotateY</button>
+  <button type="button" onclick="rotateZ()">RotateZ</button>
+  <p>Angle: <input id="angle" type="text" value="0.0" /> degrees.</p>
+  </td>
+  </tr>
+  </table>
+   
+  <h1>Practical 2</h1>
+  <h2>Part 1: matrix transforms</h2>
+  <p>The application given here displays a pyramid and two matrices.  The first matrix is 
+  applied to the scene after some initial viewing transformations (perspective and a shift of the view back from the centre).
+  When the multiply button is pressed the first matrix is replaced with the first matrix multiplied by the second. 
+  Practice applying different transforms to the pyramid, taking note of the structure of the matrix and the effect on
+  the scene.  Try and make the following compound transformations using multiple matrix operations:</p>
+  <ol>
+  <li>Directional scaling: Rotate z by 30 degrees, scale by a small amount in x (e.g. 1.1), and rotate z by -30 degrees. Copy the resulting matrix back (use the copy button) and apply it repeatedly using the multiply button.</li>
+  <li>Shearing: Rotate z by 45 degrees, scale x by sqrt(3.0) (approx 1.73) and then z rotate by -30 degrees.  The result is not a pure shear, but includes some scaling, can you remove it?</li>
+  <li>Rotation about a corner: Perform z-rotation about one corner of the pyramid by shifting by (0.5, 0.5, 0.0),
+rotating about z and then shifting by (-0.5, -0.5, 0.0).  If you make the rotation small, then copy the result into the Update Matrix and keep hitting multiply, you should see the pyramid rotating around the corner.</li>
+  <li>Axis rotation: rotate about the axis (1, 1, 1) by 5 degrees by the following sequence: rotate x -45 degrees, rotate
+y -45 degrees, rotate z 5 degrees, rotate y 45 degrees and rotate x 45 degrees.  Can you see why this works?</li>
+  <li>You might notice that creating a x or y rotation matrix for a small angle and repeatedly multiplying the current matrix by it gives and effect that might be suitable for rotation with the mouse.  How would you implement mouse rotation using this?</li>
+</ol>
+  </p>
+ <h2>Part 2: Vector transforms and shaders</h2>
+ <p>Next try and code some of the vector transforms discussed in the lectures by extending the vertex shader.  
+ You will need to edit the code in the shader to implement these.  You will need to declare new uniform variables in the vertex shader.
+         You will then need to implement the formula in the shader code using these variables.  To initialise the variable from your application you will need to 
+         get a handle to the variable from the shader program object (see the initShaders method).  You will then need to set the value of the new variables using the
+         appropriate function (e.g. gluniform3v vor a 3d vector).</p>
+ <ol>
+     <li>Implement directional scaling using the formula given in the lectures (equation 220).  This requires as input the scaling direction vector and a float to hold the magnitude of the scale.
+     </li>
+     <li>Implement directional shear using the equation given in the lectures (equation 247). This reqires as input the shear direction and the shear normal.  You will need to form the outerproduct matrix from these vectors, which has been provided in the shader code as a function. </li>
+ </ol>
+ <h2>Part 3: shading and texture</h2>
+ <p>Next try and add lighting and shading to the pyramid and map a texture onto it.  First try lighting the pyramid.  Add variables to the vertex shader, a uniform light position and an attribute normal vector. 
+    the normal array has been created already and can be passed to the shader in a similar way to the colours.  Start with a simple
+    diffuse (Lambertian) shading model calculated at the vertices and passed to the fragment shader using the vCol varying variable.
+    Check that the normal vectors are correct and note that they are not normalised, so will need to be normalised in the shader.
+ </p>
+ <p>To texture map the pyramid you will need to create an array of 2D vectors representing the texture coordinates.  Each coordinate should be between 0 and 1.  As a suggestion, you could wrap the based of the pyramid to a diamond 
+    shape (corners of the pyramid at the midpoint of the edges of the texture) and the 4 corners mapping to the top of the pyramid, one on each face. 
+    Again the texture coordinates need to be passed to the shader in an attribute variable, and then put in a varying variable that is passed to the 
+    fragment shader.  The texture itself is passed to the shader in a uniform sampler2D variable and the texture2D function can be used to 
+    get the colour at each value of the texture coordinate.  To get the texture into the shader you can use a Javascript Image and call the provided
+    <em>handleLoadedTexture</em> in the onload function of the Image. You should set the value of the shader variable to the number of the active texture unit
+    i.e.</p>
+    <pre> 
+        var texture = gl.createTexture(); // could be global if only one texture, only need to do once for each texture
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+        </pre>
+ </p>
+  </body>
+</html>
